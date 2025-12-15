@@ -173,38 +173,11 @@ impl Gtin {
     /// assert_eq!(valid.to_string(), "00706285102001".to_string());
     /// ```
     pub fn new(input: &str) -> Result<Self, GtinError> {
-        let (full_length, kind) = match input.len() {
-            8 => (format!("000000{}", input), GtinKind::Gtin8),
-            12 => (
-                format!("00{}", input),
-                if &input[..4] == "0000" {
-                    GtinKind::Gtin8
-                } else {
-                    GtinKind::Gtin12
-                },
-            ),
-            13 => (
-                format!("0{}", input),
-                if &input[..5] == "00000" {
-                    GtinKind::Gtin8
-                } else if &input[..1] == "0" {
-                    GtinKind::Gtin12
-                } else {
-                    GtinKind::Gtin13
-                },
-            ),
-            14 => (
-                input.to_string(),
-                if &input[..6] == "000000" {
-                    GtinKind::Gtin8
-                } else if &input[..2] == "00" {
-                    GtinKind::Gtin12
-                } else if &input[..1] == "0" {
-                    GtinKind::Gtin13
-                } else {
-                    GtinKind::Gtin14
-                },
-            ),
+        let full_length = match input.len() {
+            8 => format!("000000{}", input),
+            12 => format!("00{}", input),
+            13 => format!("0{}", input),
+            14 => input.to_string(),
             _ => return Err(GtinError::InvalidLength),
         };
 
@@ -224,6 +197,16 @@ impl Gtin {
         if expected != actual {
             return Err(GtinError::InvalidCheckDigit);
         }
+
+        let kind = if digits[..6] == [0; 6] {
+            GtinKind::Gtin8
+        } else if digits[..2] == [0; 2] {
+            GtinKind::Gtin12
+        } else if digits[..1] == [0] {
+            GtinKind::Gtin13
+        } else {
+            GtinKind::Gtin14
+        };
 
         Ok(Self { digits, kind })
     }
