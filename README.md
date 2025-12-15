@@ -1,22 +1,24 @@
-# ean13
+# gtin
 
-Parses and validates EAN-13 barcodes and the UPC-A subset. This crate is intended to be simple and lightweight compared to other barcoding crates. For extra functionality like generating barcode images see [barcoders](https://github.com/buntine/barcoders).
+Provides a data type and validator for working with Global Trade Identification Numbers (GTIN). Works with subsets like GTIN-8 (EAN8), GTIN-12 (UPC), GTIN-13 (EAN13), and GTIN-14.
+
+This crate is intended to be simple and lightweight compared to other barcoding crates. For extra functionality like generating barcode images see [barcoders](https://github.com/buntine/barcoders).
 
 # Examples
 
 ```rust
-use ean13::{Ean13, Ean13Error};
+use gtin::{Gtin, GtinError};
 
 fn main() {
-    let sample = Ean13::from_str("0010576000465").unwrap();
-    assert_eq!(sample.to_string(), "0010576000465".to_string());
+    let sample = Gtin::from_str("0010576000465").unwrap();
+    assert_eq!(sample.to_string(), "00010576000465".to_string());
     
-    // 12 digit codes are assumed to be UPC-A, and the implied 0 is inserted at the start automatically
-    let upca_sample = Ean13::from_str("010576000465").unwrap();
-    assert_eq!(upca_sample.to_string(), "0010576000465".to_string());
+    // 12 digit codes are assumed to be GTIN-12, and 2 leading zeros are inserted at the start for padding
+    let upca_sample = Gtin::from_str("010576000465").unwrap();
+    assert_eq!(upca_sample.to_string(), "00010576000465".to_string());
 
-    // Attempting to create an invalid EAN-13 will cause an error
-    assert_eq!(Ean13::from_str("010576000466"), Err(Ean13Error::InvalidCheckDigit));
+    // Attempting to create an invalid GTIN will cause an error
+    assert_eq!(Gtin::from_str("010576000466"), Err(GtinError::InvalidCheckDigit));
 }
 ```
 
