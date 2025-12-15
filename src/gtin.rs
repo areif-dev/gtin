@@ -7,11 +7,11 @@
 //!
 //! fn main() {
 //!     let sample = Gtin::new("0010576000465").unwrap();
-//!     assert_eq!(sample.to_string(), "0010576000465".to_string());
+//!     assert_eq!(sample.to_string(), "00010576000465".to_string());
 //!     
 //!     // 12 digit codes are assumed to be UPC-A, and 2 zeros are padded to the beginning
 //!     let upca_sample = Gtin::new("010576000465").unwrap();
-//!     assert_eq!(upca_sample.to_string(), "0010576000465".to_string());
+//!     assert_eq!(upca_sample.to_string(), "00010576000465".to_string());
 //!
 //!     assert_eq!(Gtin::new("010576000466"), Err(GtinError::InvalidCheckDigit));
 //! }
@@ -27,13 +27,35 @@ use serde::{Deserialize, Serialize};
 /// Calculates the check digit for a GTIN based on the first 13 digits of the code. Useful for
 /// validating codes
 ///
+/// The calculation uses the standard weighted sum algorithm:
+/// 1. Sum the digits at odd positions (1st, 3rd, 5th, etc.).
+/// 2. Sum the digits at even positions (2nd, 4th, 6th, etc.).
+/// 3. Calculate `(SumOdd * 3) + SumEven`.
+/// 4. The check digit is the smallest number added to the total to make it a multiple of 10.
+///
 /// # Arguments
 ///
-/// * `first_13` - The first 13 digits of the code to calculate a check digit for
+/// * `first_13` - The first 13 digits of the code to calculate a check digit for (as an array of `u8`)
 ///
 /// # Returns
 ///
 /// The appropriate check digit for the supplied code
+///
+/// # Examples
+///
+/// The first 13 digits of a code `0001057600046` result in a check digit of `5`.
+///
+/// ```rust
+/// use gtin::calculate_check_digit;
+///
+/// // Example of a GTIN-13 code (without the check digit)
+/// // Digits: 0 0 0 1 0 5 7 6 0 0 0 4 6 5
+/// // (The actual code is 00010576000465, but we provide only the first 13 digits)
+/// let first_13_digits: [u8; 13] = [0, 0, 0, 1, 0, 5, 7, 6, 0, 0, 0, 4, 6];
+/// let check_digit = calculate_check_digit(first_13_digits);
+///
+/// assert_eq!(check_digit, 5);
+/// ```
 pub fn calculate_check_digit(first_13: [u8; 13]) -> u8 {
     let sum_odd: u32 = first_13.iter().step_by(2).map(|&d| d as u32).sum();
     let sum_even: u32 = first_13.iter().skip(1).step_by(2).map(|&d| d as u32).sum();
@@ -48,7 +70,7 @@ pub fn calculate_check_digit(first_13: [u8; 13]) -> u8 {
 /// Errors that occur when validating a code
 #[derive(Debug, PartialEq, Eq)]
 pub enum GtinError {
-    /// Occurs when a code is not exactly 13 digits long. (Or 12 digits as a preceding 0 is assumed)
+    /// Occurs when the length of the supplied code is not one of 8, 12, 13, or 14
     InvalidLength,
 
     /// There is a character in the code that is not 0-9
@@ -56,6 +78,38 @@ pub enum GtinError {
 
     /// The check digit of the supplied code is incorrect
     InvalidCheckDigit,
+}
+
+/// Represents the specific standard/format of the GTIN code.
+///
+/// A GTIN code is always internally stored as 14 digits, but its "Kind"
+/// denotes the original standard it conforms to, which is defined by its
+/// effective length (8, 12, 13, or 14 digits).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+pub enum GtinKind {
+    /// Global Trade Item Number - 8 digits (equivalent to EAN-8).
+    ///
+    /// This is stored internally as a 14-digit code with six leading zeros.
+    Gtin8,
+    /// Global Trade Item Number - 12 digits (equivalent to UPC-A).
+    ///
+    /// This is stored internally as a 14-digit code with two leading zeros.
+    Gtin12,
+    /// Global Trade Item Number - 13 digits (equivalent to EAN-13).
+    ///
+    /// This is stored internally as a 14-digit code with one leading zero.
+    Gtin13,
+    /// Global Trade Item Number - 14 digits (often used for trade/shipping units).
+    ///
+    /// This is stored internally as the full 14-digit code.
+    Gtin14,
+}
+
+/// Represents a validated GTIN barcode
+#[derive(Clone, PartialEq, Eq, Hash, Copy)]
+pub struct Gtin {
+    digits: [u8; 14],
+    kind: GtinKind,
 }
 
 impl fmt::Display for GtinError {
@@ -82,21 +136,6 @@ impl fmt::Display for GtinError {
 
 impl std::error::Error for GtinError {}
 
-/// Represents a validated GTIN barcode
-#[derive(Clone, PartialEq, Eq, Hash, Copy)]
-pub struct Gtin {
-    digits: [u8; 14],
-    kind: GtinKind,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
-pub enum GtinKind {
-    Gtin8,
-    Gtin12,
-    Gtin13,
-    Gtin14,
-}
-
 impl Debug for Gtin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -109,7 +148,7 @@ impl Debug for Gtin {
 }
 
 impl Gtin {
-    /// Attempts to parse &str into a GTIN
+    /// Attempts to parse a GTIN from `&str`
     ///
     /// # Arguments
     ///
@@ -117,12 +156,13 @@ impl Gtin {
     ///
     /// # Returns
     ///
-    /// * A valid [`Gtin`] if successful. Otherwise, return an [`Error`]
+    /// * A valid [`Gtin`] if successful. Otherwise, return a [`GtinError`]
     ///
     /// # Errors
     ///
-    /// Returns a member of [`GtinError`] if the length of the supplied code is not either 14, 13,
-    /// 12, or 8 corresponding to GTIN-14, GTIN-13, GTIN-12, or GTIN-8
+    /// * [`GtinError::InvalidLength`] if the length of `input` is not 8, 12, 13, or 14
+    /// * [`GtinError::InvalidCharacter`] if any character of `input` is not a digit 0-9
+    /// * [`GtinError::InvalidCheckDigit`] if `input` does not have a valid check digit
     ///
     /// # Examples
     ///
@@ -188,15 +228,82 @@ impl Gtin {
         Ok(Self { digits, kind })
     }
 
-    /// Represents the code as an array of 13 u8 digits
+    /// Returns the GTIN code as an array of 14 `u8` digits.
+    ///
+    /// This array always contains the full 14-digit GTIN representation,
+    /// including any leading zeros that were prepended to the code
+    /// from its original length (8, 12, or 13 digits).
+    ///
+    /// # Returns
+    ///
+    /// The 14-digit GTIN code as a fixed-size array `[u8; 14]`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use gtin::Gtin;
+    ///
+    /// // Input is a 12-digit UPC-A (GTIN-12), which gets padded with two leading zeros: "00".
+    /// let gtin_12 = Gtin::new("010576000465").unwrap();
+    ///
+    /// // The resulting 14-digit array is:
+    /// let expected_arr: [u8; 14] = [0, 0, 0, 1, 0, 5, 7, 6, 0, 0, 0, 4, 6, 5];
+    ///
+    /// assert_eq!(gtin_12.as_arr(), expected_arr);
+    /// ```
     pub fn as_arr(&self) -> [u8; 14] {
         self.digits.clone()
     }
 
+    /// Returns the specific kind of GTIN (GTIN-8, GTIN-12, GTIN-13, or GTIN-14)
+    /// based on the number of leading zeros in the 14-digit representation.
+    ///
+    /// # Returns
+    ///
+    /// The [`GtinKind`] variant corresponding to the original code structure.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use gtin::{Gtin, GtinKind};
+    ///
+    /// // A 12-digit UPC-A code is stored as GTIN-12
+    /// let gtin_12 = Gtin::new("010576000465").unwrap();
+    /// assert_eq!(gtin_12.kind(), GtinKind::Gtin12);
+    ///
+    /// // A 13-digit EAN-13 code is stored as GTIN-13
+    /// let gtin_13 = Gtin::new("9506000140445").unwrap();
+    /// assert_eq!(gtin_13.kind(), GtinKind::Gtin13);
+    /// ```
     pub fn kind(&self) -> GtinKind {
         self.kind
     }
 
+    /// Returns the GTIN digits as a `String`, stripped of any leading zeros
+    /// that were padded during creation to meet the 14-digit format.
+    ///
+    /// This effectively returns the code in its original length (8, 12, 13, or 14 digits)
+    /// based on its [`GtinKind`].
+    ///
+    /// # Returns
+    ///
+    /// A `String` containing the original, un-padded digits of the GTIN code.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use gtin::Gtin;
+    ///
+    /// // A 12-digit code normalized to 12 digits
+    /// let upca = Gtin::new("010576000465").unwrap();
+    /// assert_eq!(upca.to_string(), "00010576000465".to_string()); // Full 14-digit display
+    /// assert_eq!(upca.normalize_digits(), "010576000465".to_string()); // Original length
+    ///
+    /// // A 8-digit code normalized to 8 digits
+    /// let gtin8 = Gtin::new("40000008").unwrap();
+    /// assert_eq!(gtin8.to_string(), "00000040000008".to_string()); // Full 14-digit display
+    /// assert_eq!(gtin8.normalize_digits(), "40000008".to_string()); // Original length
+    /// ```
     pub fn normalize_digits(&self) -> String {
         self.to_string()
     }
