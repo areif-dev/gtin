@@ -288,13 +288,25 @@ impl Gtin {
     /// assert_eq!(gtin8.normalize_digits(), "40000008".to_string()); // Original length
     /// ```
     pub fn normalize_digits(&self) -> String {
-        self.to_string()
+        match self.kind() {
+            GtinKind::Gtin8 => self.digits[6..].iter().map(|d| d.to_string()).collect(),
+            GtinKind::Gtin12 => self.digits[2..].iter().map(|d| d.to_string()).collect(),
+            GtinKind::Gtin13 => self.digits[1..].iter().map(|d| d.to_string()).collect(),
+            GtinKind::Gtin14 => self.digits.iter().map(|d| d.to_string()).collect(),
+        }
     }
 }
 
 impl fmt::Display for Gtin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(
+            f,
+            "{}",
+            self.digits
+                .iter()
+                .map(|d| d.to_string())
+                .collect::<String>()
+        )
     }
 }
 
