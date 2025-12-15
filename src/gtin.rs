@@ -280,14 +280,14 @@ impl Gtin {
     /// // A 12-digit code normalized to 12 digits
     /// let upca = Gtin::new("010576000465").unwrap();
     /// assert_eq!(upca.to_string(), "00010576000465".to_string()); // Full 14-digit display
-    /// assert_eq!(upca.normalize_digits(), "010576000465".to_string()); // Original length
+    /// assert_eq!(upca.to_string_no_padding(), "010576000465".to_string()); // Original length
     ///
     /// // A 8-digit code normalized to 8 digits
     /// let gtin8 = Gtin::new("40000008").unwrap();
     /// assert_eq!(gtin8.to_string(), "00000040000008".to_string()); // Full 14-digit display
-    /// assert_eq!(gtin8.normalize_digits(), "40000008".to_string()); // Original length
+    /// assert_eq!(gtin8.to_string_no_padding(), "40000008".to_string()); // Original length
     /// ```
-    pub fn normalize_digits(&self) -> String {
+    pub fn to_string_no_padding(&self) -> String {
         match self.kind() {
             GtinKind::Gtin8 => self.digits[6..].iter().map(|d| d.to_string()).collect(),
             GtinKind::Gtin12 => self.digits[2..].iter().map(|d| d.to_string()).collect(),
@@ -535,7 +535,7 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_digits() {
+    fn test_to_string_no_padding() {
         let samples = sample_gtins();
         for (kind, gtins_and_codes) in samples {
             for (gtin, _) in gtins_and_codes {
@@ -545,7 +545,7 @@ mod tests {
                     GtinKind::Gtin13 => 13,
                     GtinKind::Gtin14 => 14,
                 };
-                assert_eq!(gtin.normalize_digits().len(), expected_length);
+                assert_eq!(gtin.to_string_no_padding().len(), expected_length);
             }
         }
     }
