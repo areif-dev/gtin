@@ -74,7 +74,7 @@ pub enum GtinError {
     InvalidLength,
 
     /// There is a character in the code that is not 0-9
-    InvalidDigit,
+    InvalidCharacter,
 
     /// The check digit of the supplied code is incorrect
     InvalidCheckDigit,
@@ -121,7 +121,7 @@ impl fmt::Display for GtinError {
                     "Attempted to generate a GTIN with an invalid check digit"
                 )
             }
-            Self::InvalidDigit => {
+            Self::InvalidCharacter => {
                 write!(
                     f,
                     "Attempted to generate a GTIN with non numeric characters"
@@ -212,9 +212,9 @@ impl Gtin {
         for (i, ch) in full_length.chars().enumerate() {
             digits[i] = ch
                 .to_digit(10)
-                .ok_or(GtinError::InvalidDigit)?
+                .ok_or(GtinError::InvalidCharacter)?
                 .try_into()
-                .or(Err(GtinError::InvalidDigit))?;
+                .or(Err(GtinError::InvalidCharacter))?;
         }
 
         // Validate check digit
