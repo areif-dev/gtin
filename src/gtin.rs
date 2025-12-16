@@ -172,12 +172,12 @@ impl Gtin {
     /// let valid = Gtin::new("706285102001").unwrap();
     /// assert_eq!(valid.to_string(), "00706285102001".to_string());
     /// ```
-    pub fn new(input: &str) -> Result<Self, GtinError> {
-        let full_length = match input.len() {
-            8 => format!("000000{}", input),
-            12 => format!("00{}", input),
-            13 => format!("0{}", input),
-            14 => input.to_string(),
+    pub fn new(code: &str) -> Result<Self, GtinError> {
+        let full_length = match code.len() {
+            8 => format!("000000{}", code),
+            12 => format!("00{}", code),
+            13 => format!("0{}", code),
+            14 => code.to_string(),
             _ => return Err(GtinError::InvalidLength),
         };
 
