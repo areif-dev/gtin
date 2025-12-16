@@ -211,6 +211,85 @@ impl Gtin {
         Ok(Self { digits, kind })
     }
 
+    /// Attempts to construct a GTIN by cleaning and strictly validating the last 14 digits found in the input string.
+    ///
+    /// This "non-strict" constructor attempts to clean and format the input string in a very forgiving way:
+    ///
+    /// 1. Filters: It ignores all non-digit characters in the input string.
+    /// 2. Truncates: It takes only the last 14 consecutive digits found in the remaining digits.
+    /// 3. Pads (If necessary): If fewer than 14 digits remain, it prepends leading zeros until it has 14 digits.
+    /// 4. Calculates Check Digit: It recalculates the check digit based on the first 13 digits of the resulting 14-digit code.
+    /// 5. Final Construction: It uses the newly calculated check digit and the first 13 digits to form a valid GTIN-14 code.
+    ///
+    /// # Warning
+    /// This function is intended for inputs that are visually messy (e.g., "0-105-7600-046-5" or "GTIN 010576000465").
+    /// It does not validate the original input's check digit. If the original code had a valid check digit, it will be
+    /// overwritten by the recalculated check digit in the output. This can lead to a different GTIN than the one
+    /// intended by the user if the original check digit was incorrect or missing.
+    ///
+    /// Prefer using [`Gtin::new`] for strict validation.
+    ///
+    /// # Arguments
+    ///
+    /// * `nonstrict_code` - A potentially messy string that is expected to contain a GTIN.
+    ///
+    /// # Returns
+    ///
+    /// A valid [`Gtin`] object that conforms to the GTIN-14 standard, derived from the input.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use gtin::Gtin;
+    ///
+    /// // 1. Input with non-numeric characters and spaces (12-digit code).
+    /// let messy_input = Gtin::nonstrict_new("0-105 7600-046-5"); // cleans to "00010576000465"
+    /// assert_eq!(messy_input.to_string(), "00010576000465".to_string());
+    ///
+    /// // 2. Input that is too long (only the last 14 digits are kept).
+    /// // The last 14 digits are: 01234567890128
+    /// let too_long = Gtin::nonstrict_new("112233445501234567890128");
+    /// assert_eq!(too_long.to_string(), "01234567890128".to_string());
+    ///
+    /// // 3. Input with an invalid check digit is fixed.
+    /// // Original 13 digits: 1234567890123. The correct check digit is 1.
+    /// // The input has a 9 as the last digit, but the function forces a 1.
+    /// let invalid_code = Gtin::nonstrict_new("12345678901239");
+    /// assert_eq!(invalid_code.to_string(), "12345678901231".to_string());
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the final, cleaned, and padded 14-digit string fails to be
+    /// parsed by [`Gtin::new`]. This should only happen if there is an internal logic error,
+    /// as `nonstrict_new` is designed to always produce a syntactically valid GTIN-14 string
+    /// with a guaranteed correct check digit.
+    pub fn nonstrict_new(nonstrict_code: &str) -> Self {
+        let only_digits: Vec<u8> = nonstrict_code
+            .chars()
+            .filter_map(|c| c.to_string().parse::<u8>().ok())
+            .collect();
+        let mut last_14_digits: Vec<u8> = only_digits.into_iter().rev().take(14).collect();
+        for _ in 0..(14 - last_14_digits.len()) {
+            last_14_digits.push(0);
+        }
+        last_14_digits.reverse();
+        let mut first_13 = [0u8; 13];
+        for (i, d) in last_14_digits.iter().enumerate() {
+            if i >= 13 {
+                break;
+            }
+            first_13[i] = *d;
+        }
+        let check_digit = calculate_check_digit(first_13);
+        let code = format!(
+            "{}{}",
+            first_13.iter().map(|d| d.to_string()).collect::<String>(),
+            check_digit
+        );
+        Self::new(&code).expect("Failed to generate a valid GTIN from provided input")
+    }
+
     /// Returns the GTIN code as an array of 14 `u8` digits.
     ///
     /// This array always contains the full 14-digit GTIN representation,
@@ -517,6 +596,40 @@ mod tests {
         );
         assert_eq!(Gtin::new("00413b3015071"), Err(GtinError::InvalidCharacter));
         assert_eq!(Gtin::new("123456789012345"), Err(GtinError::InvalidLength));
+    }
+
+    #[test]
+    fn test_nonstrict_new() {
+        let samples = sample_gtins();
+        for (_kind, gtins_and_codes) in samples {
+            for (gtin, code) in gtins_and_codes {
+                assert_eq!(Gtin::nonstrict_new(&code), gtin);
+            }
+        }
+        assert_eq!(
+            Gtin::nonstrict_new(""),
+            Gtin::new("00000000000000").unwrap()
+        );
+        assert_eq!(
+            Gtin::nonstrict_new("A12345678901"),
+            Gtin::new("00012345678905").unwrap()
+        );
+        assert_eq!(
+            Gtin::nonstrict_new("abcdefghijklmn"),
+            Gtin::new("00000000000000").unwrap()
+        );
+        assert_eq!(
+            Gtin::nonstrict_new("00000f12345678"),
+            Gtin::new("00000012345670").unwrap()
+        );
+        assert_eq!(
+            Gtin::nonstrict_new("123456789012345678901234567890"),
+            Gtin::new("78901234567899").unwrap()
+        );
+        assert_eq!(
+            Gtin::nonstrict_new("98765432101234"),
+            Gtin::new("98765432101231").unwrap()
+        );
     }
 
     #[test]
