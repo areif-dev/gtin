@@ -658,6 +658,10 @@ mod tests {
                     GtinKind::Gtin13 => 13,
                     GtinKind::Gtin14 => 14,
                 };
+                assert_eq!(
+                    &gtin.to_string()[14 - expected_length..],
+                    &gtin.to_string_no_padding()
+                );
                 assert_eq!(gtin.to_string_no_padding().len(), expected_length);
             }
         }
