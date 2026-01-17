@@ -13,7 +13,8 @@
 //!     let upca_sample = Gtin::new("010576000465").unwrap();
 //!     assert_eq!(upca_sample.to_string(), "00010576000465".to_string());
 //!
-//!     assert_eq!(Gtin::new("010576000466"), Err(GtinError::InvalidCheckDigit));
+//!     assert_eq!(Gtin::new("010576000466"),
+//!     Err(GtinError::InvalidCheckDigit("010576000466".to_string())));
 //! }
 //! ```
 
@@ -71,13 +72,13 @@ pub fn calculate_check_digit(first_13: [u8; 13]) -> u8 {
 #[derive(Debug, PartialEq, Eq)]
 pub enum GtinError {
     /// Occurs when the length of the supplied code is not one of 8, 12, 13, or 14
-    InvalidLength,
+    InvalidLength(String),
 
     /// There is a character in the code that is not 0-9
-    InvalidCharacter,
+    InvalidCharacter(String),
 
     /// The check digit of the supplied code is incorrect
-    InvalidCheckDigit,
+    InvalidCheckDigit(String),
 }
 
 /// Represents the specific standard/format of the GTIN code.
@@ -115,20 +116,20 @@ pub struct Gtin {
 impl fmt::Display for GtinError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidCheckDigit => {
+            Self::InvalidCheckDigit(s) => {
                 write!(
                     f,
-                    "Attempted to generate a GTIN with an invalid check digit"
+                    "Attempted to generate a GTIN with an invalid check digit: {s}"
                 )
             }
-            Self::InvalidCharacter => {
+            Self::InvalidCharacter(s) => {
                 write!(
                     f,
-                    "Attempted to generate a GTIN with non numeric characters"
+                    "Attempted to generate a GTIN with non numeric characters: {s}"
                 )
             }
-            Self::InvalidLength => {
-                write!(f, "Attempted to generate a GTIN with a bad length")
+            Self::InvalidLength(s) => {
+                write!(f, "Attempted to generate a GTIN with a bad length: {s}")
             }
         }
     }
@@ -178,24 +179,26 @@ impl Gtin {
             12 => format!("00{}", code),
             13 => format!("0{}", code),
             14 => code.to_string(),
-            _ => return Err(GtinError::InvalidLength),
+            _ => return Err(GtinError::InvalidLength(code.to_string())),
         };
 
         let mut digits = [0u8; 14];
         for (i, ch) in full_length.chars().enumerate() {
             digits[i] = ch
                 .to_digit(10)
-                .ok_or(GtinError::InvalidCharacter)?
+                .ok_or(GtinError::InvalidCharacter(code.to_string()))?
                 .try_into()
-                .or(Err(GtinError::InvalidCharacter))?;
+                .or(Err(GtinError::InvalidCharacter(code.to_string())))?;
         }
 
         // Validate check digit
-        let first_13: [u8; 13] = digits[0..13].try_into().or(Err(GtinError::InvalidLength))?;
+        let first_13: [u8; 13] = digits[0..13]
+            .try_into()
+            .or(Err(GtinError::InvalidLength(code.to_string())))?;
         let expected = calculate_check_digit(first_13);
         let actual = digits[13];
         if expected != actual {
-            return Err(GtinError::InvalidCheckDigit);
+            return Err(GtinError::InvalidCheckDigit(code.to_string()));
         }
 
         let kind = if digits[..6] == [0; 6] {
@@ -555,7 +558,7 @@ mod tests {
         ]);
 
         for (kind, list) in map.iter() {
-            for (gtin, code) in list {
+            for (gtin, _) in list {
                 assert_eq!(*kind, gtin.kind());
             }
         }
@@ -588,14 +591,23 @@ mod tests {
     #[test]
     fn test_new() {
         let _ = sample_gtins();
-        assert_eq!(Gtin::new(""), Err(GtinError::InvalidLength));
-        assert_eq!(Gtin::new("041303015071"), Err(GtinError::InvalidCheckDigit));
+        assert_eq!(Gtin::new(""), Err(GtinError::InvalidLength(String::new())));
+        assert_eq!(
+            Gtin::new("041303015071"),
+            Err(GtinError::InvalidCheckDigit("041303015071".to_string()))
+        );
         assert_eq!(
             Gtin::new("0041303015071"),
-            Err(GtinError::InvalidCheckDigit)
+            Err(GtinError::InvalidCheckDigit("0041303015071".to_string()))
         );
-        assert_eq!(Gtin::new("00413b3015071"), Err(GtinError::InvalidCharacter));
-        assert_eq!(Gtin::new("123456789012345"), Err(GtinError::InvalidLength));
+        assert_eq!(
+            Gtin::new("00413b3015071"),
+            Err(GtinError::InvalidCharacter("00413b3015071".to_string()))
+        );
+        assert_eq!(
+            Gtin::new("123456789012345"),
+            Err(GtinError::InvalidLength("123456789012345".to_string()))
+        );
     }
 
     #[test]
@@ -629,6 +641,10 @@ mod tests {
         assert_eq!(
             Gtin::nonstrict_new("98765432101234"),
             Gtin::new("98765432101231").unwrap()
+        );
+        assert_eq!(
+            Gtin::nonstrict_new("736210030361"),
+            Gtin::new("00736210030369").unwrap()
         );
     }
 
