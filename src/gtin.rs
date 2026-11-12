@@ -71,13 +71,14 @@ pub fn calculate_check_digit(first_13: [u8; 13]) -> u8 {
 /// Errors that occur when validating a code
 #[derive(Debug, PartialEq, Eq)]
 pub enum GtinError {
-    /// Occurs when the length of the supplied code is not one of 8, 12, 13, or 14
+    /// Occurs when the length of the supplied code is not one of 8, 12, 13, or 14. Contains the
+    /// full invalid string
     InvalidLength(String),
 
-    /// There is a character in the code that is not 0-9
+    /// There is a character in the code that is not 0-9. Contains the full invalid string
     InvalidCharacter(String),
 
-    /// The check digit of the supplied code is incorrect
+    /// The check digit of the supplied code is incorrect. Contains the full invalid string
     InvalidCheckDigit(String),
 }
 
